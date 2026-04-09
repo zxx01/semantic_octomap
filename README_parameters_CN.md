@@ -19,7 +19,7 @@
 
 ## 1. 点云桥接 YAML 参数
 
-这些参数来自 `params/pointcloud_semantic_bridge.yaml`，用于控制“原始点云 -> 语义点云”的通用桥接节点内部行为。
+这些参数来自 `params/pointcloud_semantic_bridge.yaml`，用于控制“原始点云 -> 语义点云”的通用桥接节点内部行为。像 `publish_sensor_tf`、`use_odom_sync` 这类运行时桥接行为开关，则由 launch 文件在启动时覆盖。
 
 | 参数名 | 默认值 | 含义 | 调节建议 |
 | --- | --- | --- | --- |
@@ -54,6 +54,8 @@
 | `output_cloud_topic` | `/semantic_pcl/semantic_pcl` | launch 层对桥接节点输出语义点云话题的覆盖。 | 多条建图链路共存时比较有用。 |
 | `world_frame_id` | `world` | launch 层对全局坐标系的覆盖。 | 需要在桥接节点、TF 和 octomap 三者之间保持一致。 |
 | `sensor_frame_id` | `semantic_sensor` | launch 层对传感器 TF 子坐标系名称的覆盖。 | 只有在现有系统已经有固定 frame 命名时才建议改。 |
+| `publish_sensor_tf` | `true` | 是否允许桥接节点在“点云 + 里程计同步模式”下广播 `world_frame_id -> sensor_frame_id` TF。 | 如果上游已经提供了所需 TF，或者你希望桥接节点不参与 TF 发布，可以关闭它。 |
+| `use_odom_sync` | `true` | 是否要求桥接节点在发布语义点云前先等到点云与里程计完成同步。 | 对依赖逐帧位姿的局部传感器点云建议保持开启；对已经注册到全局系的点云建议关闭。 |
 | `octomap_resolution` | `0.4` | 对 `octomap/resolution` 的 launch 覆盖。 | 这是最常调的参数之一，直接决定地图精度与运行代价。 |
 | `octomap_max_range` | `15.0` | 对 `octomap/max_range` 的 launch 覆盖。 | 一般结合传感器量程与远距离噪声一起调。 |
 | `octomap_raycast_range` | `10.0` | 对 `octomap/raycast_range` 的 launch 覆盖。 | 通常与 `octomap_max_range` 相同或略小。 |
@@ -66,7 +68,22 @@
 - 在 `launch/semantic_octomap.launch` 中，八叉树节点直接订阅由 `semantic_sensor_node.py` 生成的语义点云。
 - 在 `launch/pointcloud_semantic_octomap.launch` 中，八叉树输入点云话题默认跟随 `output_cloud_topic`。
 
-## 4. 推荐调参顺序
+## 4. FAST-LIVO2 启动差异参数
+
+`launch/pointcloud_semantic_octomap_fastlivo.launch` 是给 FAST-LIVO2 这类“已经发布全局注册点云”的上游系统准备的特化启动文件。
+
+| 参数名 | 默认值 | 含义 | 调节建议 |
+| --- | --- | --- | --- |
+| `rviz` | `false` | 是否随建图流程一起启动 RViz。 | 在较重的 SLAM 任务里默认关闭更稳；需要交互可视化时再打开。 |
+| `input_cloud_topic` | `/cloud_registered` | FAST-LIVO2 输出的全局注册点云。 | 应保持连接到已经注册到全局系的点云，而不是原始雷达话题。 |
+| `input_odom_topic` | `/aft_mapped_to_init` | FAST-LIVO2 里程计话题。 | 这里保留它主要是接口一致性；当 `use_odom_sync:=false` 时，桥接节点不会依赖它触发输出。 |
+| `world_frame_id` | `camera_init` | FAST-LIVO2 注册点云所在的全局坐标系。 | 一般应与上游注册点云的 `frame_id` 保持一致。 |
+| `sensor_frame_id` | `aft_mapped` | 与 FAST-LIVO2 位姿链相关的传感器/机体子坐标系名称。 | 主要在你后续重新启用 TF 发布时才有意义。 |
+| `publish_sensor_tf` | `false` | 是否广播 `camera_init -> aft_mapped` TF。 | 对已经自己管理 TF 的 FAST-LIVO2，通常建议保持关闭。 |
+| `use_odom_sync` | `false` | 是否要求点云与里程计先完成同步再发布语义点云。 | 对全局注册点云建议保持关闭，这样可以绕开点云与里程计时间戳不严格一致的问题。 |
+| `octomap_raycast_range` | `15.0` | FAST-LIVO2 启动里对 `octomap/raycast_range` 的覆盖。 | 这份 launch 默认让它与 `octomap_max_range` 一致，适合已经注册到全局系的点云输入。 |
+
+## 5. 推荐调参顺序
 
 当你接入新的传感器或仿真器时，建议按下面顺序调：
 
@@ -78,7 +95,7 @@
 6. `psi`、`phi`
 7. `min_ground_z`、`max_ground_z`
 
-## 5. 常见调参场景
+## 6. 常见调参场景
 
 | 目标 | 建议调整 |
 | --- | --- |

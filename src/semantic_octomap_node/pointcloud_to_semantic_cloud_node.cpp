@@ -49,6 +49,8 @@ public:
                                    "/semantic_pcl/semantic_pcl");
     private_nh_.param<std::string>("world_frame_id", world_frame_id_, "world");
     private_nh_.param<std::string>("sensor_frame_id", sensor_frame_id_, "semantic_sensor");
+    private_nh_.param<bool>("publish_sensor_tf", publish_sensor_tf_, true);
+    private_nh_.param<bool>("use_odom_sync", use_odom_sync_, true);
     private_nh_.param<int>("sync_queue_size", sync_queue_size_, 10);
     private_nh_.param<double>("sync_slop", sync_slop_, 0.05);
 
@@ -59,17 +61,30 @@ public:
     semantic_value_ = packBgrToFloat(semantic_bgr_);
 
     cloud_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(output_cloud_topic_, 1);
-    cloud_sub_.subscribe(nh_, input_cloud_topic_, 1);
-    odom_sub_.subscribe(nh_, input_odom_topic_, 1);
+    if (use_odom_sync_)
+    {
+      cloud_sub_.subscribe(nh_, input_cloud_topic_, 1);
+      odom_sub_.subscribe(nh_, input_odom_topic_, 1);
 
-    sync_.reset(new Synchronizer(SyncPolicy(sync_queue_size_), cloud_sub_, odom_sub_));
-    sync_->setMaxIntervalDuration(ros::Duration(sync_slop_));
-    sync_->registerCallback(
-        boost::bind(&PointCloudSemanticBridgeNode::syncedCallback, this, _1, _2));
+      sync_.reset(new Synchronizer(SyncPolicy(sync_queue_size_), cloud_sub_, odom_sub_));
+      sync_->setMaxIntervalDuration(ros::Duration(sync_slop_));
+      sync_->registerCallback(
+          boost::bind(&PointCloudSemanticBridgeNode::syncedCallback, this, _1, _2));
 
-    ROS_INFO_STREAM("Semantic cloud bridge listening on " << input_cloud_topic_
-                                                          << " and " << input_odom_topic_
-                                                          << ", publishing " << output_cloud_topic_);
+      ROS_INFO_STREAM("Semantic cloud bridge listening on " << input_cloud_topic_
+                                                            << " and " << input_odom_topic_
+                                                            << ", publishing " << output_cloud_topic_
+                                                            << " with synchronized odometry.");
+    }
+    else
+    {
+      cloud_only_sub_ = nh_.subscribe(input_cloud_topic_, 1,
+                                      &PointCloudSemanticBridgeNode::cloudOnlyCallback, this);
+
+      ROS_INFO_STREAM("Semantic cloud bridge listening on " << input_cloud_topic_
+                                                            << ", publishing " << output_cloud_topic_
+                                                            << " without odometry synchronization.");
+    }
   }
 
 private:
@@ -387,6 +402,24 @@ private:
   }
 
   /**
+   * @brief Check whether the incoming cloud message is structurally empty.
+   *
+   * Some upstream nodes publish a default-constructed PointCloud2 while their
+   * internal map output is not yet ready. Such messages contain no fields and
+   * no data and should be skipped quietly instead of treated as malformed xyz
+   * clouds.
+   *
+   * @param input_cloud Input point cloud from the upstream source.
+   * @return true When the cloud contains no schema and no point payload.
+   * @return false Otherwise.
+   */
+  static bool isStructurallyEmptyCloud(const sensor_msgs::PointCloud2 &input_cloud)
+  {
+    return input_cloud.fields.empty() && input_cloud.data.empty() &&
+           input_cloud.width == 0 && input_cloud.height == 0;
+  }
+
+  /**
    * @brief Validate that the input cloud uses a supported x/y/z encoding.
    *
    * This avoids silently mis-decoding coordinates when an upstream source
@@ -568,6 +601,21 @@ private:
    */
   std::string selectOutputFrameId(const sensor_msgs::PointCloud2ConstPtr &input_cloud)
   {
+    if (!use_odom_sync_)
+    {
+      if (input_cloud->header.frame_id.empty())
+      {
+        if (warned_empty_frame_topics_.insert(input_cloud_topic_).second)
+        {
+          ROS_WARN_STREAM("Input cloud topic " << input_cloud_topic_
+                                               << " has an empty frame_id while odometry synchronization is disabled. "
+                                               << "Falling back to " << world_frame_id_ << ".");
+        }
+        return world_frame_id_;
+      }
+      return input_cloud->header.frame_id;
+    }
+
     if (input_cloud->header.frame_id == world_frame_id_)
     {
       if (warned_world_frame_topics_.insert(input_cloud_topic_).second)
@@ -597,6 +645,12 @@ private:
   bool buildSemanticCloud(const sensor_msgs::PointCloud2ConstPtr &input_cloud,
                           sensor_msgs::PointCloud2 *output_cloud)
   {
+    if (isStructurallyEmptyCloud(*input_cloud))
+    {
+      ROS_WARN_THROTTLE(5.0, "Received structurally empty cloud on %s; skipping.", input_cloud_topic_.c_str());
+      return false;
+    }
+
     pcl::PointCloud<PointXYZRGBSemantic> semantic_cloud;
     const std::string output_frame_id = selectOutputFrameId(input_cloud);
     const CoordinateFieldLayout coordinate_layout = resolveCoordinateFieldLayout(*input_cloud);
@@ -681,8 +735,30 @@ private:
   void syncedCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg,
                       const nav_msgs::OdometryConstPtr &odom_msg)
   {
-    publishSensorTf(odom_msg, cloud_msg->header.stamp);
+    if (publish_sensor_tf_)
+    {
+      publishSensorTf(odom_msg, cloud_msg->header.stamp);
+    }
 
+    sensor_msgs::PointCloud2 semantic_cloud;
+    if (!buildSemanticCloud(cloud_msg, &semantic_cloud))
+    {
+      return;
+    }
+
+    cloud_pub_.publish(semantic_cloud);
+  }
+
+  /**
+   * @brief Process clouds directly when odometry synchronization is disabled.
+   *
+   * This mode is intended for upstream systems that already publish point
+   * clouds in a global frame, such as registered map-frame outputs from SLAM.
+   *
+   * @param cloud_msg Input point cloud from the upstream source.
+   */
+  void cloudOnlyCallback(const sensor_msgs::PointCloud2ConstPtr &cloud_msg)
+  {
     sensor_msgs::PointCloud2 semantic_cloud;
     if (!buildSemanticCloud(cloud_msg, &semantic_cloud))
     {
@@ -696,6 +772,7 @@ private:
   ros::NodeHandle private_nh_;
   ros::Publisher cloud_pub_;
   tf2_ros::TransformBroadcaster tf_broadcaster_;
+  ros::Subscriber cloud_only_sub_;
 
   message_filters::Subscriber<sensor_msgs::PointCloud2> cloud_sub_;
   message_filters::Subscriber<nav_msgs::Odometry> odom_sub_;
@@ -706,6 +783,8 @@ private:
   std::string output_cloud_topic_;
   std::string world_frame_id_;
   std::string sensor_frame_id_;
+  bool publish_sensor_tf_;
+  bool use_odom_sync_;
   int sync_queue_size_;
   double sync_slop_;
   std::vector<int> rgb_bgr_;
@@ -715,6 +794,7 @@ private:
   std::unordered_set<std::string> logged_field_mode_topics_;
   std::unordered_set<std::string> warned_missing_xyz_topics_;
   std::unordered_set<std::string> warned_unsupported_xyz_topics_;
+  std::unordered_set<std::string> warned_empty_frame_topics_;
   std::unordered_set<std::string> warned_world_frame_topics_;
 };
 

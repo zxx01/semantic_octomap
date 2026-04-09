@@ -10,6 +10,8 @@ This repository provides two input pipelines:
    `launch/semantic_octomap.launch` starts the original `semantic_sensor_node.py` image pipeline and the octomap node.
 2. Generic point cloud to semantic point cloud bridging  
    `launch/pointcloud_semantic_octomap.launch` starts a C++ bridge node that converts an arbitrary point cloud plus synchronized odometry into the semantic point type expected by the octomap node.
+3. Global registered point cloud bridging  
+   `launch/pointcloud_semantic_octomap_fastlivo.launch` starts the same C++ bridge in cloud-only mode for upstream systems that already publish registered global-frame clouds.
 
 The octomap backend is shared by both pipelines.
 
@@ -78,6 +80,12 @@ Run the simulator example:
 
 ```bash
 roslaunch semantic_octomap examples/simulator_pointcloud_semantic_octomap.launch
+```
+
+Run the FAST-LIVO2 example:
+
+```bash
+roslaunch semantic_octomap pointcloud_semantic_octomap_fastlivo.launch
 ```
 
 ## Directory Layout
@@ -151,10 +159,49 @@ The current defaults in [pointcloud_semantic_octomap.launch](launch/pointcloud_s
 - `output_cloud_topic:=/semantic_pcl/semantic_pcl`
 - `world_frame_id:=world`
 - `sensor_frame_id:=semantic_sensor`
+- `publish_sensor_tf:=true`
+
+### FAST-LIVO2 / Registered Global-Cloud Mode
+
+Use [pointcloud_semantic_octomap_fastlivo.launch](launch/pointcloud_semantic_octomap_fastlivo.launch) when the upstream system already publishes a registered point cloud in a global frame, such as FAST-LIVO2 `/cloud_registered`.
+
+```bash
+roslaunch semantic_octomap pointcloud_semantic_octomap_fastlivo.launch
+```
+
+This launch is intentionally different from the default bridge launch:
+
+- it uses `world_frame_id:=camera_init`
+- it keeps the incoming global cloud frame
+- it defaults `publish_sensor_tf:=false`
+- it disables odometry synchronization with `use_odom_sync:=false`
+
+This is useful for registered map-frame clouds whose point cloud and odometry timestamps are not guaranteed to match closely enough for message filter synchronization.
 
 ## Generic Bridge Behavior
 
-The C++ bridge node is implemented in [pointcloud_to_semantic_cloud_node.cpp](src/semantic_octomap_node/pointcloud_to_semantic_cloud_node.cpp). It synchronizes point cloud and odometry, broadcasts `world_frame_id -> sensor_frame_id` TF, converts the input to `PointXYZRGBSemantic`, and publishes the semantic point cloud consumed by the octomap node.
+The C++ bridge node is implemented in [pointcloud_to_semantic_cloud_node.cpp](src/semantic_octomap_node/pointcloud_to_semantic_cloud_node.cpp). It supports two operating modes:
+
+- synchronized cloud + odometry mode
+- cloud-only mode for already registered global-frame clouds
+
+In both cases it converts the input to `PointXYZRGBSemantic` and publishes the semantic point cloud consumed by the octomap node.
+
+### TF Publishing Control
+
+The bridge also supports a runtime `publish_sensor_tf` switch exposed by the launch files:
+
+- `publish_sensor_tf:=true` keeps the original behavior and broadcasts `world_frame_id -> sensor_frame_id` during synchronized cloud + odometry processing
+- `publish_sensor_tf:=false` disables that TF publication
+
+This is mainly useful when the upstream system already provides the needed TF, or when the bridge is being used in cloud-only mode with already registered global-frame clouds.
+
+The bridge also exposes `use_odom_sync` through the launch files:
+
+- `use_odom_sync:=true` enables synchronized cloud + odometry processing
+- `use_odom_sync:=false` switches the bridge into cloud-only mode
+
+This is useful for registered global-frame clouds whose output no longer needs per-cloud odometry pairing.
 
 ### Frame Handling
 
@@ -162,6 +209,7 @@ The bridge supports both common upstream cloud conventions:
 
 - If the input cloud is already in `world_frame_id`, the bridge preserves that frame to avoid applying odometry twice.
 - If the input cloud is in the sensor-local frame, the bridge publishes it in `sensor_frame_id` and lets the octomap node transform it through TF.
+- If odometry synchronization is disabled, the bridge keeps the input cloud frame directly and does not publish sensor TF.
 
 This prevents the common “map appears higher or shifted than the cloud” issue caused by double transformation.
 

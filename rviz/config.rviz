@@ -25,7 +25,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: cloud_registered
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -53,12 +53,12 @@ Visualization Manager:
       Class: rviz/Map
       Color Scheme: map
       Draw Behind: false
-      Enabled: false
+      Enabled: true
       Name: Map
       Topic: /occupancy_map_2D
       Unreliable: false
       Use Timestamp: false
-      Value: false
+      Value: true
     - Class: octomap_rviz_plugin/ColorOccupancyGrid
       Enabled: true
       Max. Height Display: 3.4028234663852886e+38
@@ -168,11 +168,39 @@ Visualization Manager:
       Topic: /quad_0/lidar_slam/odom
       Unreliable: false
       Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 239; 41; 41
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: cloud_registered
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 4
+      Size (m): 0.009999999776482582
+      Style: Points
+      Topic: /cloud_registered
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
   Enabled: true
   Global Options:
-    Background Color: 255; 255; 255
+    Background Color: 0; 0; 0
     Default Light: true
-    Fixed Frame: world
+    Fixed Frame: camera_init
     Frame Rate: 30
   Name: root
   Tools:
@@ -196,7 +224,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 64.61490631103516
+      Distance: 13077495
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -212,9 +240,9 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.544796347618103
+      Pitch: 1.5697963237762451
       Target Frame: husky/base
-      Yaw: 3.1353940963745117
+      Yaw: 3.2253949642181396
     Saved: ~
 Window Geometry:
   Displays:
