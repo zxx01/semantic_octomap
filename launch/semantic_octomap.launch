@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="ISO-8859-15"?>
+<launch>
+  <arg name="pointcloud_topic" default="/semantic_pcl/semantic_pcl"/>
+  <arg name="world_frame_id" default="world"/>
+  <arg name="octomap_resolution" default="0.5"/>
+  <arg name="octomap_max_range" default="15.0"/>
+  <arg name="octomap_raycast_range" default="10.0"/>
+  <arg name="min_ground_z" default="1.0"/>
+  <arg name="max_ground_z" default="3.5"/>
+  <arg name="save_path" default="/address/to/save/map.ot"/>
+
+  <rosparam file="$(find semantic_octomap)/params/semantic_cloud.yaml" command="load"/>
+  <!--<rosparam file="$(find semantic_octomap)/params/semantic_labels.yaml" command="load"/>-->
+  <node pkg="semantic_octomap" type="semantic_sensor_node.py" name="semantic_cloud" output="screen">
+    <param name="agent_name" value="" />
+  </node>
+  <rosparam file="$(find semantic_octomap)/params/octomap_generator.yaml" command="load"/>
+  <param name="/octomap/pointcloud_topic" value="$(arg pointcloud_topic)"/>
+  <param name="/octomap/world_frame_id" value="$(arg world_frame_id)"/>
+  <param name="/octomap/resolution" value="$(arg octomap_resolution)"/>
+  <param name="/octomap/max_range" value="$(arg octomap_max_range)"/>
+  <param name="/octomap/raycast_range" value="$(arg octomap_raycast_range)"/>
+  <param name="/octomap/min_ground_z" value="$(arg min_ground_z)"/>
+  <param name="/octomap/max_ground_z" value="$(arg max_ground_z)"/>
+  <param name="/octomap/save_path" value="$(arg save_path)"/>
+  <node pkg="semantic_octomap" type="semantic_octomap_node" name="semantic_octomap" output="screen"/>
+
+
+  <arg name="body_frame" default="base_link"/>
+  <arg name="optic_frame" default="camera_optic"/>
+  <node pkg="tf2_ros" type="static_transform_publisher" name="body2camera" 
+  args="0 0 0 -1.5708 0 -1.5708 $(arg body_frame) $(arg optic_frame)" />
+</launch>

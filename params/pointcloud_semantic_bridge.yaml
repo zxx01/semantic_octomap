@@ -1,0 +1,4 @@
+sync_queue_size: 10
+sync_slop: 0.05
+rgb_bgr: [180, 180, 180]
+semantic_bgr: [0, 255, 0]

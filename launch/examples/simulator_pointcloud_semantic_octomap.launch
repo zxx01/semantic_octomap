@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+  <!--
+    Example launch for a simulator that publishes:
+    - /quad0_pcl_render_node/sensor_cloud
+    - /quad_0/lidar_slam/odom
+  -->
+  <include file="$(find semantic_octomap)/launch/pointcloud_semantic_octomap.launch">
+    <arg name="input_cloud_topic" value="/quad0_pcl_render_node/sensor_cloud"/>
+    <arg name="input_odom_topic" value="/quad_0/lidar_slam/odom"/>
+  </include>
+</launch>
