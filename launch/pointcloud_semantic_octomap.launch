@@ -8,7 +8,7 @@
   <arg name="world_frame_id" default="world"/>
   <arg name="sensor_frame_id" default="semantic_sensor"/>
   <arg name="publish_sensor_tf" default="true"/>
-  <arg name="use_odom_sync" default="true"/>
+  <arg name="display_color_mode" default="semantic"/>
 
   <arg name="octomap_resolution" default="0.4"/>
   <arg name="octomap_max_range" default="15.0"/>
@@ -26,6 +26,7 @@
   <param name="/octomap/min_ground_z" value="$(arg min_ground_z)"/>
   <param name="/octomap/max_ground_z" value="$(arg max_ground_z)"/>
   <param name="/octomap/save_path" value="$(arg save_path)"/>
+  <param name="/octomap/display_color_mode" value="$(arg display_color_mode)"/>
 
   <node pkg="semantic_octomap"
         type="pointcloud_semantic_cloud_bridge_node"
@@ -39,7 +40,6 @@
       world_frame_id: $(arg world_frame_id)
       sensor_frame_id: $(arg sensor_frame_id)
       publish_sensor_tf: $(arg publish_sensor_tf)
-      use_odom_sync: $(arg use_odom_sync)
     </rosparam>
   </node>
 

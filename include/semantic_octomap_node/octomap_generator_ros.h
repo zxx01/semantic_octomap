@@ -60,6 +60,7 @@ protected:
     tf::TransformListener tf_listener_; ///<Listener for the transform between the camera and the world coordinates
     std::string world_frame_id_; ///<Id of the world frame
     std::string pointcloud_topic_; ///<Topic name for subscribed pointcloud message
+    std::string display_color_mode_; ///<Default display color mode: "semantic" or "rgb"
     float max_range_; ///<Max range for points to be inserted into octomap
     float raycast_range_; ///<Max range for points to perform raycasting to free unoccupied space
     float clamping_thres_max_; ///<Upper bound of occupancy probability for a node

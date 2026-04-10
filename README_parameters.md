@@ -21,7 +21,7 @@ In practice:
 ## 1. Point Cloud Bridge YAML Parameters
 
 These parameters come from `params/pointcloud_semantic_bridge.yaml` and control the internal behavior of the generic point-cloud-to-semantic-point-cloud bridge node.
-Launch files can still override bridge behavior at runtime, such as `publish_sensor_tf` and `use_odom_sync`.
+Launch files can still override bridge behavior at runtime, such as `publish_sensor_tf`.
 
 | Parameter | Default | Meaning | Tuning suggestion |
 | --- | --- | --- | --- |
@@ -57,10 +57,11 @@ These are the main arguments exposed by `launch/pointcloud_semantic_octomap.laun
 | `world_frame_id` | `world` | Launch-level override for the global mapping frame. | Keep consistent across bridge, TF, and octomap. |
 | `sensor_frame_id` | `semantic_sensor` | Launch-level override for the sensor TF child frame. | Change only when integrating with an existing frame naming convention. |
 | `publish_sensor_tf` | `true` | Whether the bridge should broadcast `world_frame_id -> sensor_frame_id` TF during synchronized cloud + odometry processing. | Disable it when the upstream system already publishes the needed TF, or when you want the bridge to stay TF-neutral. |
-| `use_odom_sync` | `true` | Whether the bridge should wait for synchronized odometry before republishing semantic clouds. | Keep it enabled for sensor-local clouds that rely on per-frame pose. Disable it for already registered global-frame clouds. |
+| `display_color_mode` | `semantic` | Default serialization color mode for the `octomap_color` topic. Accepted values are `semantic` and `rgb`. | Use `semantic` when RViz should show semantic class colors. Use `rgb` when you want the map to reflect input RGB colors instead. The runtime `toggle_use_semantic_color` service can switch this later without restarting the node. |
+| `rviz` | `true` | Whether to start RViz together with the generic bridge pipeline. | Keep it on for bring-up and debugging, or disable it on heavier runs when you do not need live visualization. |
 | `octomap_resolution` | `0.4` | Launch override for `octomap/resolution`. | This is usually one of the first parameters to tune for map quality versus runtime. |
 | `octomap_max_range` | `15.0` | Launch override for `octomap/max_range`. | Tune together with sensor range and noise level. |
-| `octomap_raycast_range` | `10.0` | Launch override for `octomap/raycast_range`. | Usually keep equal to or slightly below `octomap_max_range`. |
+| `octomap_raycast_range` | `15.0` | Launch override for `octomap/raycast_range`. | Usually keep equal to or slightly below `octomap_max_range`. |
 | `min_ground_z` | `1.0` | Launch override for `octomap/min_ground_z`. | Useful for quick 2D occupancy projection tuning without touching YAML. |
 | `max_ground_z` | `3.5` | Launch override for `octomap/max_ground_z`. | Useful for quick 2D occupancy projection tuning without touching YAML. |
 | `save_path` | `/tmp/semantic_map.ot` | Launch override for `octomap/save_path`. | Set a unique experiment path if you want to preserve each run. |
@@ -72,18 +73,19 @@ Notes:
 
 ## 4. FAST-LIVO2 Launch Differences
 
-`launch/pointcloud_semantic_octomap_fastlivo.launch` is a specialized launch for already registered global-frame clouds such as FAST-LIVO2 `/cloud_registered`.
+`launch/pointcloud_semantic_octomap_fastlivo.launch` is a ready-to-use launch preset for wiring FAST-LIVO2 `/cloud_body` and `/aft_mapped_to_init` into the same synchronized bridge pipeline.
 
 | Parameter | Default | Meaning | Tuning suggestion |
 | --- | --- | --- | --- |
 | `rviz` | `false` | Whether to start RViz together with the mapping pipeline. | Keep it off by default on heavier SLAM runs; enable only when you need interactive visualization. |
-| `input_cloud_topic` | `/cloud_registered` | Registered global-frame cloud from FAST-LIVO2. | Keep this on the registered cloud topic, not the raw lidar topic. |
-| `input_odom_topic` | `/aft_mapped_to_init` | FAST-LIVO2 odometry topic. | Retained for interface consistency, but the bridge does not use it when `use_odom_sync:=false`. |
-| `world_frame_id` | `camera_init` | Global frame used by FAST-LIVO2 registered clouds. | This should normally stay aligned with the upstream registered cloud frame. |
-| `sensor_frame_id` | `aft_mapped` | Optional sensor/pose frame name associated with the upstream odometry chain. | Mostly relevant only if you later re-enable TF publication. |
-| `publish_sensor_tf` | `false` | Whether the bridge should broadcast `camera_init -> aft_mapped`. | Usually keep it disabled because FAST-LIVO2 already manages its own TF and the bridge is operating on global-frame clouds. |
-| `use_odom_sync` | `false` | Whether the bridge requires synchronized odometry before republishing semantic clouds. | Keep it disabled for registered global-frame clouds to avoid blocking on timestamp mismatch between cloud and odometry. |
-| `octomap_raycast_range` | `15.0` | FAST-LIVO2 launch override for `octomap/raycast_range`. | This launch keeps it equal to `octomap_max_range` because the input is already a registered global cloud. |
+| `input_cloud_topic` | `/cloud_body` | FAST-LIVO2 point cloud topic. | Keep it aligned with the actual cloud topic published by your FAST-LIVO2 setup. |
+| `input_odom_topic` | `/aft_mapped_to_init` | FAST-LIVO2 odometry topic. | Keep it time-aligned with the cloud topic because the bridge now always runs in synchronized cloud + odometry mode. |
+| `world_frame_id` | `camera_init` | Global frame used by the FAST-LIVO2 launch preset. | This should normally stay aligned with the upstream cloud frame. |
+| `sensor_frame_id` | `semantic_sensor` | TF child frame name used by the bridge. | Change only if you need to match an existing frame naming convention. |
+| `publish_sensor_tf` | `true` | Whether the bridge should broadcast `camera_init -> semantic_sensor`. | Disable it when the upstream system already publishes the needed TF and you want to avoid duplicate transforms. |
+| `display_color_mode` | `rgb` | Default serialization color mode for the FAST-LIVO2 `octomap_color` topic. Accepted values are `semantic` and `rgb`. | `rgb` is a practical default when you want RViz to follow the registered cloud appearance directly. Switch to `semantic` when semantic class colors are more useful. |
+| `octomap_max_range` | `40.0` | FAST-LIVO2 launch override for `octomap/max_range`. | Reduce it if far-range registered points add too much noise or runtime overhead. |
+| `octomap_raycast_range` | `40.0` | FAST-LIVO2 launch override for `octomap/raycast_range`. | Usually keep it consistent with `octomap_max_range` unless free-space clearing is too aggressive. |
 
 ## 5. Practical Tuning Order
 

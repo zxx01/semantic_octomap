@@ -7,10 +7,32 @@ namespace octomap {
     template<class SEMANTICS>
     SemanticOcTree<SEMANTICS>::SemanticOcTree(double resolution)
             : OccupancyOcTreeBase<SemanticOcTreeNode<SEMANTICS> >(this->resolution),
-                    phiTree(), psiTree(), maxLogOddsTree(), minLogOddsTree(), minOccupancyLogOdds()
+                    phiTree(), psiTree(), maxLogOddsTree(), minLogOddsTree(), minOccupancyLogOdds(),
+                    default_use_semantic_color_(true), default_write_semantics_(true)
     {
         semanticOcTreeMemberInit.ensureLinking();
     };
+
+    template<class SEMANTICS>
+    void SemanticOcTree<SEMANTICS>::applySerializationSettings(SemanticOcTreeNode<SEMANTICS>* node)
+    {
+        if (node == NULL)
+            return;
+
+        node->use_semantic_color = default_use_semantic_color_;
+        node->write_semantics = default_write_semantics_;
+    }
+
+    template<class SEMANTICS>
+    void SemanticOcTree<SEMANTICS>::applySerializationSettingsToChildren(SemanticOcTreeNode<SEMANTICS>* node)
+    {
+        if (node == NULL || !this->nodeHasChildren(node))
+            return;
+
+        for (unsigned int i = 0; i < 8; ++i)
+            if (this->nodeChildExists(node, i))
+                applySerializationSettings(this->getNodeChild(node, i));
+    }
 
     template<class SEMANTICS>
     bool SemanticOcTree<SEMANTICS>::pruneNode(SemanticOcTreeNode<SEMANTICS>* node) {
@@ -58,6 +80,7 @@ namespace octomap {
     template<class SEMANTICS>
     void SemanticOcTree<SEMANTICS>::setUseSemanticColor(bool use)
     {
+        default_use_semantic_color_ = use;
         // Traverse all tree nodes
         for(typename SemanticOcTree<SEMANTICS>::tree_iterator it = this->begin_tree(), end=this->end_tree(); it!= end; ++it)
             it->use_semantic_color = use;
@@ -66,6 +89,7 @@ namespace octomap {
     template<class SEMANTICS>
     void SemanticOcTree<SEMANTICS>::setWriteSemantics(bool write)
     {
+        default_write_semantics_ = write;
         // Traverse all tree nodes
         for(typename SemanticOcTree<SEMANTICS>::tree_iterator it = this->begin_tree(), end=this->end_tree(); it!= end; ++it)
             it->write_semantics = write;
@@ -170,6 +194,7 @@ namespace octomap {
         bool createdRoot = false;
         if (this->root == NULL){
           this->root = new SemanticOcTreeNode<SEMANTICS>();
+          applySerializationSettings(this->root);
           this->tree_size++;
           createdRoot = true;
         }
@@ -207,6 +232,7 @@ namespace octomap {
         bool createdRoot = false;
         if (this->root == NULL){
           this->root = new SemanticOcTreeNode<SEMANTICS>();
+          applySerializationSettings(this->root);
           this->tree_size++;
           createdRoot = true;
         }
@@ -244,10 +270,12 @@ namespace octomap {
               // current node does not have children AND it is not a new node 
               // -> expand pruned node
               this->expandNode(node);
+              applySerializationSettingsToChildren(node);
             }
             else {
               // not a pruned node, create requested child
               this->createNodeChild(node, pos);
+              applySerializationSettings(this->getNodeChild(node, pos));
               created_node = true;
             }
           }
@@ -310,10 +338,12 @@ namespace octomap {
               // current node does not have children AND it is not a new node 
               // -> expand pruned node
               this->expandNode(node);
+              applySerializationSettingsToChildren(node);
             }
             else {
               // not a pruned node, create requested child
               this->createNodeChild(node, pos);
+              applySerializationSettings(this->getNodeChild(node, pos));
               created_node = true;
             }
           }
@@ -516,6 +546,9 @@ namespace octomap {
             }
             return true;
         }
+
+        // All host/input semantic combinations are handled above.
+        return false;
     }
     
     template<class SEMANTICS>

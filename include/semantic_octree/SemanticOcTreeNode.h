@@ -36,6 +36,8 @@ namespace octomap
         {
             ColorOcTreeNode::copyData(from);
             semantics = from.getSemantics();
+            use_semantic_color = from.use_semantic_color;
+            write_semantics = from.write_semantics;
         }
 
         /// Get semantics

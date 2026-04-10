@@ -10,8 +10,8 @@ This repository provides two input pipelines:
    `launch/semantic_octomap.launch` starts the original `semantic_sensor_node.py` image pipeline and the octomap node.
 2. Generic point cloud to semantic point cloud bridging  
    `launch/pointcloud_semantic_octomap.launch` starts a C++ bridge node that converts an arbitrary point cloud plus synchronized odometry into the semantic point type expected by the octomap node.
-3. Global registered point cloud bridging  
-   `launch/pointcloud_semantic_octomap_fastlivo.launch` starts the same C++ bridge in cloud-only mode for upstream systems that already publish registered global-frame clouds.
+3. FAST-LIVO2 point cloud bridge preset  
+   `launch/pointcloud_semantic_octomap_fastlivo.launch` starts the same C++ bridge with FAST-LIVO2 topic and frame defaults for `/cloud_body` and `/aft_mapped_to_init`.
 
 The octomap backend is shared by both pipelines.
 
@@ -20,10 +20,10 @@ The octomap backend is shared by both pipelines.
 `semantic_octomap_node` publishes:
 
 - `octomap_full`: full semantic octree serialization
-- `octomap_color`: maximum-likelihood semantic color octree
+- `octomap_color`: RViz-oriented color octree serialization using the active display color mode
 - `occupancy_map_2D`: 2D occupancy projection
 
-For RViz, prefer `octomap_color`. In practice, `octomap_rviz_plugins` can visualize `octomap_color` reliably, while visualizing `octomap_full` may crash RViz.
+For RViz, prefer `octomap_color`. In practice, `octomap_rviz_plugins` can visualize `octomap_color` reliably, while visualizing `octomap_full` may crash RViz. The `octomap_color` topic can serialize either semantic colors or RGB colors, depending on `display_color_mode` or the runtime toggle service.
 
 ## Dependencies
 
@@ -147,45 +147,50 @@ roslaunch semantic_octomap examples/simulator_pointcloud_semantic_octomap.launch
 ```bash
 roslaunch semantic_octomap pointcloud_semantic_octomap.launch \
   input_cloud_topic:=/your/cloud \
-  input_odom_topic:=/your/odom
+  input_odom_topic:=/your/odom \
+  display_color_mode:=rgb
 ```
 
 ### Current Default Launch Values
 
 The current defaults in [pointcloud_semantic_octomap.launch](launch/pointcloud_semantic_octomap.launch) are:
 
+- `rviz:=true`
 - `input_cloud_topic:=/quad0_pcl_render_node/cloud`
 - `input_odom_topic:=/quad_0/lidar_slam/odom`
 - `output_cloud_topic:=/semantic_pcl/semantic_pcl`
 - `world_frame_id:=world`
 - `sensor_frame_id:=semantic_sensor`
 - `publish_sensor_tf:=true`
+- `display_color_mode:=semantic`
 
-### FAST-LIVO2 / Registered Global-Cloud Mode
+### FAST-LIVO2 Launch Preset
 
-Use [pointcloud_semantic_octomap_fastlivo.launch](launch/pointcloud_semantic_octomap_fastlivo.launch) when the upstream system already publishes a registered point cloud in a global frame, such as FAST-LIVO2 `/cloud_registered`.
+Use [pointcloud_semantic_octomap_fastlivo.launch](launch/pointcloud_semantic_octomap_fastlivo.launch) when integrating FAST-LIVO2 topics directly into the semantic octomap pipeline.
 
 ```bash
 roslaunch semantic_octomap pointcloud_semantic_octomap_fastlivo.launch
 ```
 
-This launch is intentionally different from the default bridge launch:
+This launch is a ready-to-use preset around the same synchronized bridge node:
 
+- it uses `input_cloud_topic:=/cloud_body`
+- it uses `input_odom_topic:=/aft_mapped_to_init`
 - it uses `world_frame_id:=camera_init`
-- it keeps the incoming global cloud frame
-- it defaults `publish_sensor_tf:=false`
-- it disables odometry synchronization with `use_odom_sync:=false`
+- it adds `display_color_mode:=rgb` by default
+- it keeps the rest of the octomap stack identical to the generic bridge pipeline
 
-This is useful for registered map-frame clouds whose point cloud and odometry timestamps are not guaranteed to match closely enough for message filter synchronization.
+You can choose the default octomap display color at launch time:
+
+```bash
+roslaunch semantic_octomap pointcloud_semantic_octomap_fastlivo.launch display_color_mode:=rgb
+```
+
+Accepted values are `semantic` (default) and `rgb`.
 
 ## Generic Bridge Behavior
 
-The C++ bridge node is implemented in [pointcloud_to_semantic_cloud_node.cpp](src/semantic_octomap_node/pointcloud_to_semantic_cloud_node.cpp). It supports two operating modes:
-
-- synchronized cloud + odometry mode
-- cloud-only mode for already registered global-frame clouds
-
-In both cases it converts the input to `PointXYZRGBSemantic` and publishes the semantic point cloud consumed by the octomap node.
+The C++ bridge node is implemented in [pointcloud_to_semantic_cloud_node.cpp](src/semantic_octomap_node/pointcloud_to_semantic_cloud_node.cpp). It synchronizes an input point cloud with odometry, optionally publishes `world_frame_id -> sensor_frame_id` TF, converts the result to `PointXYZRGBSemantic`, and republishes the semantic point cloud consumed by the octomap node.
 
 ### TF Publishing Control
 
@@ -194,14 +199,16 @@ The bridge also supports a runtime `publish_sensor_tf` switch exposed by the lau
 - `publish_sensor_tf:=true` keeps the original behavior and broadcasts `world_frame_id -> sensor_frame_id` during synchronized cloud + odometry processing
 - `publish_sensor_tf:=false` disables that TF publication
 
-This is mainly useful when the upstream system already provides the needed TF, or when the bridge is being used in cloud-only mode with already registered global-frame clouds.
+This is useful when the upstream system already provides the needed TF, or when you want the bridge to remain TF-neutral.
 
-The bridge also exposes `use_odom_sync` through the launch files:
+### Octomap Display Color Control
 
-- `use_odom_sync:=true` enables synchronized cloud + odometry processing
-- `use_odom_sync:=false` switches the bridge into cloud-only mode
+The octomap node supports two color serialization modes for `octomap_color`:
 
-This is useful for registered global-frame clouds whose output no longer needs per-cloud odometry pairing.
+- `display_color_mode:=semantic` publishes semantic colors by default
+- `display_color_mode:=rgb` publishes RGB colors by default
+
+You can also switch the mode at runtime through the `toggle_use_semantic_color` service exposed by `semantic_octomap_node`. The selected mode is applied to both the current tree and subsequently inserted voxels, so RViz stays consistent while the map keeps growing.
 
 ### Frame Handling
 
@@ -209,7 +216,6 @@ The bridge supports both common upstream cloud conventions:
 
 - If the input cloud is already in `world_frame_id`, the bridge preserves that frame to avoid applying odometry twice.
 - If the input cloud is in the sensor-local frame, the bridge publishes it in `sensor_frame_id` and lets the octomap node transform it through TF.
-- If odometry synchronization is disabled, the bridge keeps the input cloud frame directly and does not publish sensor TF.
 
 This prevents the common “map appears higher or shifted than the cloud” issue caused by double transformation.
 
@@ -260,6 +266,7 @@ The current configuration is intentionally split this way:
 
 - Set RViz `Fixed Frame` to match `world_frame_id`.
 - Add an `Octomap` display and subscribe to `octomap_color`.
+- `octomap_color` follows the active display mode, so `display_color_mode:=rgb` shows RGB colors and `display_color_mode:=semantic` shows semantic colors.
 - Use `occupancy_map_2D` for the 2D map view.
 - If the map looks vertically shifted relative to the cloud, first check whether the input cloud is already in `world` frame and whether the odometry frame corresponds to the actual sensor frame.
 

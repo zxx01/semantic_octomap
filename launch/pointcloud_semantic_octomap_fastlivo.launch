@@ -2,17 +2,17 @@
 <launch>
   <arg name="rviz" default="false"/>
 
-  <arg name="input_cloud_topic" default="/cloud_registered"/>
+  <arg name="input_cloud_topic" default="/cloud_body"/>
   <arg name="input_odom_topic" default="/aft_mapped_to_init"/>
   <arg name="output_cloud_topic" default="/semantic_pcl/semantic_pcl"/>
   <arg name="world_frame_id" default="camera_init"/>
-  <arg name="sensor_frame_id" default="aft_mapped"/>
-  <arg name="publish_sensor_tf" default="false"/>
-  <arg name="use_odom_sync" default="false"/>
+  <arg name="sensor_frame_id" default="semantic_sensor"/>
+  <arg name="publish_sensor_tf" default="true"/>
+  <arg name="display_color_mode" default="rgb"/> <!-- rgb or semantic -->
 
   <arg name="octomap_resolution" default="0.4"/>
-  <arg name="octomap_max_range" default="15.0"/>
-  <arg name="octomap_raycast_range" default="15.0"/>
+  <arg name="octomap_max_range" default="40.0"/>
+  <arg name="octomap_raycast_range" default="40.0"/>
   <arg name="min_ground_z" default="1.0"/>
   <arg name="max_ground_z" default="3.5"/>
   <arg name="save_path" default="/tmp/semantic_map.ot"/>
@@ -26,6 +26,7 @@
   <param name="/octomap/min_ground_z" value="$(arg min_ground_z)"/>
   <param name="/octomap/max_ground_z" value="$(arg max_ground_z)"/>
   <param name="/octomap/save_path" value="$(arg save_path)"/>
+  <param name="/octomap/display_color_mode" value="$(arg display_color_mode)"/>
 
   <node pkg="semantic_octomap"
         type="pointcloud_semantic_cloud_bridge_node"
@@ -39,7 +40,6 @@
       world_frame_id: $(arg world_frame_id)
       sensor_frame_id: $(arg sensor_frame_id)
       publish_sensor_tf: $(arg publish_sensor_tf)
-      use_odom_sync: $(arg use_odom_sync)
     </rosparam>
   </node>
 

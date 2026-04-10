@@ -19,7 +19,7 @@
 
 ## 1. 点云桥接 YAML 参数
 
-这些参数来自 `params/pointcloud_semantic_bridge.yaml`，用于控制“原始点云 -> 语义点云”的通用桥接节点内部行为。像 `publish_sensor_tf`、`use_odom_sync` 这类运行时桥接行为开关，则由 launch 文件在启动时覆盖。
+这些参数来自 `params/pointcloud_semantic_bridge.yaml`，用于控制“原始点云 -> 语义点云”的通用桥接节点内部行为。像 `publish_sensor_tf` 这类运行时桥接行为开关，则由 launch 文件在启动时覆盖。
 
 | 参数名 | 默认值 | 含义 | 调节建议 |
 | --- | --- | --- | --- |
@@ -55,10 +55,11 @@
 | `world_frame_id` | `world` | launch 层对全局坐标系的覆盖。 | 需要在桥接节点、TF 和 octomap 三者之间保持一致。 |
 | `sensor_frame_id` | `semantic_sensor` | launch 层对传感器 TF 子坐标系名称的覆盖。 | 只有在现有系统已经有固定 frame 命名时才建议改。 |
 | `publish_sensor_tf` | `true` | 是否允许桥接节点在“点云 + 里程计同步模式”下广播 `world_frame_id -> sensor_frame_id` TF。 | 如果上游已经提供了所需 TF，或者你希望桥接节点不参与 TF 发布，可以关闭它。 |
-| `use_odom_sync` | `true` | 是否要求桥接节点在发布语义点云前先等到点云与里程计完成同步。 | 对依赖逐帧位姿的局部传感器点云建议保持开启；对已经注册到全局系的点云建议关闭。 |
+| `display_color_mode` | `semantic` | `octomap_color` 话题默认采用的颜色序列化模式，可选值为 `semantic` 和 `rgb`。 | 当你希望 RViz 按语义类别颜色显示时用 `semantic`；当你希望地图直接沿用输入 RGB 颜色时用 `rgb`。后续也可以通过运行时 `toggle_use_semantic_color` 服务切换，无需重启节点。 |
+| `rviz` | `true` | 是否在通用桥接 launch 中同时启动 RViz。 | 调试和接线阶段建议开启；若建图负载较重且不需要实时可视化，可关闭。 |
 | `octomap_resolution` | `0.4` | 对 `octomap/resolution` 的 launch 覆盖。 | 这是最常调的参数之一，直接决定地图精度与运行代价。 |
 | `octomap_max_range` | `15.0` | 对 `octomap/max_range` 的 launch 覆盖。 | 一般结合传感器量程与远距离噪声一起调。 |
-| `octomap_raycast_range` | `10.0` | 对 `octomap/raycast_range` 的 launch 覆盖。 | 通常与 `octomap_max_range` 相同或略小。 |
+| `octomap_raycast_range` | `15.0` | 对 `octomap/raycast_range` 的 launch 覆盖。 | 通常与 `octomap_max_range` 相同或略小。 |
 | `min_ground_z` | `1.0` | 对 `octomap/min_ground_z` 的 launch 覆盖。 | 适合快速调 2D 投影范围，不用改 YAML。 |
 | `max_ground_z` | `3.5` | 对 `octomap/max_ground_z` 的 launch 覆盖。 | 适合快速调 2D 投影范围，不用改 YAML。 |
 | `save_path` | `/tmp/semantic_map.ot` | 对 `octomap/save_path` 的 launch 覆盖。 | 建议为每次实验设定独立路径，便于结果留存。 |
@@ -70,18 +71,19 @@
 
 ## 4. FAST-LIVO2 启动差异参数
 
-`launch/pointcloud_semantic_octomap_fastlivo.launch` 是给 FAST-LIVO2 这类“已经发布全局注册点云”的上游系统准备的特化启动文件。
+`launch/pointcloud_semantic_octomap_fastlivo.launch` 是一份现成的 FAST-LIVO2 接线预设，用来把 `/cloud_body` 和 `/aft_mapped_to_init` 接入同一套“点云 + 里程计同步”桥接流程。
 
 | 参数名 | 默认值 | 含义 | 调节建议 |
 | --- | --- | --- | --- |
 | `rviz` | `false` | 是否随建图流程一起启动 RViz。 | 在较重的 SLAM 任务里默认关闭更稳；需要交互可视化时再打开。 |
-| `input_cloud_topic` | `/cloud_registered` | FAST-LIVO2 输出的全局注册点云。 | 应保持连接到已经注册到全局系的点云，而不是原始雷达话题。 |
-| `input_odom_topic` | `/aft_mapped_to_init` | FAST-LIVO2 里程计话题。 | 这里保留它主要是接口一致性；当 `use_odom_sync:=false` 时，桥接节点不会依赖它触发输出。 |
-| `world_frame_id` | `camera_init` | FAST-LIVO2 注册点云所在的全局坐标系。 | 一般应与上游注册点云的 `frame_id` 保持一致。 |
-| `sensor_frame_id` | `aft_mapped` | 与 FAST-LIVO2 位姿链相关的传感器/机体子坐标系名称。 | 主要在你后续重新启用 TF 发布时才有意义。 |
-| `publish_sensor_tf` | `false` | 是否广播 `camera_init -> aft_mapped` TF。 | 对已经自己管理 TF 的 FAST-LIVO2，通常建议保持关闭。 |
-| `use_odom_sync` | `false` | 是否要求点云与里程计先完成同步再发布语义点云。 | 对全局注册点云建议保持关闭，这样可以绕开点云与里程计时间戳不严格一致的问题。 |
-| `octomap_raycast_range` | `15.0` | FAST-LIVO2 启动里对 `octomap/raycast_range` 的覆盖。 | 这份 launch 默认让它与 `octomap_max_range` 一致，适合已经注册到全局系的点云输入。 |
+| `input_cloud_topic` | `/cloud_body` | FAST-LIVO2 输出的点云话题。 | 应与实际 FAST-LIVO2 发布的话题保持一致。 |
+| `input_odom_topic` | `/aft_mapped_to_init` | FAST-LIVO2 里程计话题。 | 由于桥接节点现在始终工作在“点云 + 里程计同步模式”下，应确保它与点云时间对齐。 |
+| `world_frame_id` | `camera_init` | FAST-LIVO2 预设使用的全局坐标系。 | 一般应与上游点云的 `frame_id` 保持一致。 |
+| `sensor_frame_id` | `semantic_sensor` | 桥接节点使用的 TF 子坐标系名称。 | 只有在你需要对齐现有 frame 命名习惯时才建议修改。 |
+| `publish_sensor_tf` | `true` | 是否广播 `camera_init -> semantic_sensor` TF。 | 如果上游已经提供了所需 TF，且你想避免重复发布，可以关闭它。 |
+| `display_color_mode` | `rgb` | FAST-LIVO2 预设下 `octomap_color` 默认采用的颜色序列化模式，可选值为 `semantic` 和 `rgb`。 | 如果你希望 RViz 更贴近注册点云的外观，`rgb` 是更实用的默认值；如果更关心类别可视化，则切到 `semantic`。 |
+| `octomap_max_range` | `40.0` | FAST-LIVO2 启动里对 `octomap/max_range` 的覆盖。 | 如果远距离注册点带来较多噪声或运行开销，可以适当减小。 |
+| `octomap_raycast_range` | `40.0` | FAST-LIVO2 启动里对 `octomap/raycast_range` 的覆盖。 | 通常与 `octomap_max_range` 保持一致；若 free-space 清理过强，可适当减小。 |
 
 ## 5. 推荐调参顺序
 

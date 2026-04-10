@@ -7,6 +7,8 @@
 #include <cmath>
 #include <sstream>
 #include <cstring> // For std::memcpy
+#include <algorithm>
+#include <cctype>
 
 OctomapGeneratorNode::OctomapGeneratorNode(ros::NodeHandle& nh): nh_(nh)
 {
@@ -44,6 +46,21 @@ void OctomapGeneratorNode::reset()
     nh_.getParam("/octomap/publish_2d_map", publish_2d_map);
     nh_.getParam("/octomap/min_ground_z", min_ground_z);
     nh_.getParam("/octomap/max_ground_z", max_ground_z);
+    if (!nh_.getParam("/octomap/display_color_mode", display_color_mode_))
+        display_color_mode_ = "semantic";
+    std::transform(display_color_mode_.begin(), display_color_mode_.end(), display_color_mode_.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    bool use_semantic_color = true;
+    if (display_color_mode_ == "rgb")
+        use_semantic_color = false;
+    else if (display_color_mode_ != "semantic")
+    {
+        ROS_WARN_STREAM("Unknown /octomap/display_color_mode=" << display_color_mode_
+                         << ", fallback to semantic.");
+        display_color_mode_ = "semantic";
+    }
+    octomap_generator_->setUseSemanticColor(use_semantic_color);
+    ROS_INFO_STREAM("Default octomap display color: " << display_color_mode_);
     octomap_generator_->setClampingThresMin(clamping_thres_min_);
     octomap_generator_->setClampingThresMax(clamping_thres_max_);
     octomap_generator_->setResolution(resolution_);

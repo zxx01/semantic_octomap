@@ -57,9 +57,9 @@ namespace octomap
 
     virtual bool isNodeCollapsible(const SemanticOcTreeNode<SEMANTICS>* node) const;
 
-    bool isUseSemanticColor(){return this->root->use_semantic_color;}
+    bool isUseSemanticColor() const {return default_use_semantic_color_;}
     
-    bool doesWriteSemantics(){return this->root->write_semantics;}
+    bool doesWriteSemantics() const {return default_write_semantics_;}
 
     void setUseSemanticColor(bool use);
     
@@ -159,6 +159,9 @@ namespace octomap
     bool get_ray_RLE(const octomap::point3d& origin, const octomap::point3d& end, semantic_octomap::RayRLE& rayRLE_msg);
 
     protected:
+    void applySerializationSettings(SemanticOcTreeNode<SEMANTICS>* node);
+    void applySerializationSettingsToChildren(SemanticOcTreeNode<SEMANTICS>* node);
+
     void updateInnerOccupancyRecurs(SemanticOcTreeNode<SEMANTICS>* node, unsigned int depth);
     
     SemanticOcTreeNode<SEMANTICS>* updateNodeRecurs(SemanticOcTreeNode<SEMANTICS>* node, bool node_just_created, const OcTreeKey& key,
@@ -204,6 +207,8 @@ namespace octomap
     float phiTree, psiTree;
     float maxLogOddsTree, minLogOddsTree;
     float minOccupancyLogOdds;
+    bool default_use_semantic_color_;
+    bool default_write_semantics_;
 };
 
 } // end namespace
